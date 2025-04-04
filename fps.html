@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPS avec Babylon.js</title>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/cannon.js"></script>
+    <style>
+        * { margin: 0; padding: 0; overflow: hidden; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+        #startButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            background: #ff9900;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button id="startButton">Cliquez pour commencer</button>
+    <canvas id="renderCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("renderCanvas");
+        const engine = new BABYLON.Engine(canvas, true);
+
+        // Création de la scène
+        const createScene = () => {
+            const scene = new BABYLON.Scene(engine);
+            scene.gravity = new BABYLON.Vector3(0, -9.81, 0);
+            scene.collisionsEnabled = true;
+
+            // Caméra FPS
+            const camera = new BABYLON.UniversalCamera("camera", new BABYLON.Vector3(0, 2, -10), scene);
+            camera.attachControl(canvas, true);
+            camera.applyGravity = true;
+            camera.ellipsoid = new BABYLON.Vector3(1, 1, 1);
+            camera.checkCollisions = true;
+            camera.speed = 0.3; // Vitesse du joueur
+
+            // Lumière
+            const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+            light.intensity = 0.9;
+
+            // Sol
+            const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 50, height: 50 }, scene);
+            ground.checkCollisions = true;
+            const groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+            groundMaterial.diffuseColor = new BABYLON.Color3(0.3, 0.7, 0.3);
+            ground.material = groundMaterial;
+
+            // Cible pour tester les tirs
+            const target = BABYLON.MeshBuilder.CreateBox("target", { size: 2 }, scene);
+            target.position.set(0, 2, 10);
+            const targetMaterial = new BABYLON.StandardMaterial("targetMat", scene);
+            targetMaterial.diffuseColor = new BABYLON.Color3(1, 0, 0);
+            target.material = targetMaterial;
+
+            // Déplacements clavier
+            let inputMap = {};
+            scene.actionManager = new BABYLON.ActionManager(scene);
+            scene.onKeyboardObservable.add((kbInfo) => {
+                inputMap[kbInfo.event.key] = kbInfo.type === BABYLON.KeyboardEventTypes.KEYDOWN;
+            });
+
+            // Tir avec clic gauche
+            scene.onPointerDown = (evt) => {
+                if (evt.button === 0) { // Clic gauche
+                    shoot();
+                }
+            };
+
+            // Fonction pour tirer
+            const shoot = () => {
+                let bullet = BABYLON.MeshBuilder.CreateSphere("bullet", { diameter: 0.2 }, scene);
+                bullet.material = new BABYLON.StandardMaterial("bulletMat", scene);
+                bullet.material.diffuseColor = new BABYLON.Color3(1, 1, 0);
+                bullet.position = camera.position.clone();
+
+                let direction = camera.getForwardRay().direction;
+                let speed = 1;
+
+                scene.registerBeforeRender(() => {
+                    bullet.position.addInPlace(direction.scale(speed));
+
+                    // Vérifie la collision avec la cible
+                    if (bullet.intersectsMesh(target, false)) {
+                        target.material.diffuseColor = new BABYLON.Color3(Math.random(), Math.random(), Math.random()); // Change de couleur
+                        bullet.dispose();
+                    }
+                });
+
+                setTimeout(() => bullet.dispose(), 2000); // Supprime la balle après 2 secondes
+            };
+
+            // Système de saut
+            let canJump = true;
+            scene.onKeyboardObservable.add((kbInfo) => {
+                if (kbInfo.event.code === "Space" && canJump) {
+                    canJump = false;
+                    let jumpHeight = 3;
+                    let jumpSpeed = 0.2;
+                    let jumpUp = setInterval(() => {
+                        camera.position.y += jumpSpeed;
+                        if (camera.position.y >= jumpHeight) {
+                            clearInterval(jumpUp);
+                            let jumpDown = setInterval(() => {
+                                camera.position.y -= jumpSpeed;
+                                if (camera.position.y <= 2) {
+                                    camera.position.y = 2;
+                                    clearInterval(jumpDown);
+                                    canJump = true;
+                                }
+                            }, 10);
+                        }
+                    }, 10);
+                }
+            });
+
+            // Mise à jour du déplacement
+            scene.onBeforeRenderObservable.add(() => {
+                if (inputMap["z"]) camera.position.addInPlace(camera.getForwardRay().direction.scale(camera.speed));
+                if (inputMap["s"]) camera.position.addInPlace(camera.getForwardRay().direction.scale(-camera.speed));
+                if (inputMap["q"]) camera.position.addInPlace(camera.getForwardRay().direction.cross(new BABYLON.Vector3(0, 1, 0)).scale(-camera.speed));
+                if (inputMap["d"]) camera.position.addInPlace(camera.getForwardRay().direction.cross(new BABYLON.Vector3(0, 1, 0)).scale(camera.speed));
+            });
+
+            return scene;
+        };
+
+        // Démarrer la scène
+        const scene = createScene();
+        engine.runRenderLoop(() => scene.render());
+        window.addEventListener("resize", () => engine.resize());
+
+        // Activer le mode plein écran et le verrouillage de la souris
+        document.getElementById("startButton").addEventListener("click", () => {
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+            if (canvas.requestPointerLock) canvas.requestPointerLock();
+            document.getElementById("startButton").style.display = "none";
+        });
+    </script>
+</body>
+</html>
